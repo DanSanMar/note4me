@@ -156,11 +156,7 @@ main_menu() {
 # ----------------------------------------------------------------------
 search_content() {
     local selected
-    # Detectar el comando de bat según el sistema (bat o batcat)
-    local bat_cmd="bat"
-    command -v batcat >/dev/null 2>&1 && bat_cmd="batcat"
-
-    # --theme=ansi en bat/batcat evita que se pinte un fondo negro en la previsualización
+   
     selected=$( (cd "$NOTES_DIR" && rg --line-number --no-heading --color=always "" 2>/dev/null) | fzf \
         --ansi \
         --header="-BUSCAR EN: $NOTES_DIR" \
@@ -170,7 +166,7 @@ search_content() {
         --border \
         --delimiter=: \
         --preview-window="right:30%:border-rounded:wrap" \
-        --preview="$bat_cmd --theme=ansi --style=plain --color=always --highlight-line {2} '$NOTES_DIR/{1}' 2>/dev/null || head -n 30 '$NOTES_DIR/{1}'")
+        --preview="$BAT_CMD --theme=ansi --style=plain --color=always --highlight-line {2} '$NOTES_DIR/{1}' 2>/dev/null || head -n 30 '$NOTES_DIR/{1}'")
 
     if [ -n "$selected" ]; then
         local file line
@@ -225,6 +221,7 @@ create_note() {
                 return
             fi
 
+            new_folder_name=$(echo "$new_folder_name" | tr -d '\n' | sed 's#^/*##; s#\.\./##g')
             target_dir="$NOTES_DIR/$new_folder_name"
             mkdir -p "$target_dir"
         else
@@ -254,6 +251,10 @@ create_note() {
         sleep 1
         return
     fi
+
+    # Sanitizar el nombre del archivo (remover saltos de línea y traversal)
+    filename=$(echo "$filename" | tr -d '\r\n' | sed 's#^/*##; s#\.\./##g')
+    [[ -z "$filename" ]] && return
 
     # Auto-completar extensión .txt si no ingresó ninguna
     [[ "$filename" != *.* ]] && filename="${filename}.txt"
