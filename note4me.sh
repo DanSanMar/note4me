@@ -1,11 +1,40 @@
 #!/usr/bin/env bash
 
-# Configuración básica
+# ----------------------------------------------------------------------
+# Configuración inicial y Variables Globales
+# ----------------------------------------------------------------------
 NOTES_DIR="$HOME/note4me"
 mkdir -p "$NOTES_DIR"
-version="v 1.0"
+version="v 1.1"
 
-# 0. Logo - note4me Claro con Subtítulo
+# Flag para prevenir ejecuciones múltiples del trap durante el exit
+IS_EXITING=0
+
+# ----------------------------------------------------------------------
+# Control Seguro de Salida y Captura de Señales (TRAP)
+# ----------------------------------------------------------------------
+cleanup() {
+    local exit_code=${1:-$?}
+    
+    # Prevenir bucles de salida o ejecuciones dobles
+    [[ $IS_EXITING -eq 1 ]] && return
+    IS_EXITING=1
+
+    # Restaurar estado de la terminal (Cursor visible, eco de teclas)
+    tput cnorm 2>/dev/null || true
+    stty echo 2>/dev/null || true
+
+    echo -e "\n\n\033[1;33m[!] Cerrando note4me de forma segura... ¡Bye Bye! 📝4me\033[0m"
+    exit "$exit_code"
+}
+
+# Capturar Ctrl+C (SIGINT), Terminate (SIGTERM) y HUP
+trap 'cleanup 130' INT
+trap 'cleanup 143' TERM HUP
+
+# ----------------------------------------------------------------------
+# Logo
+# ----------------------------------------------------------------------
 logo() {
     echo "     ┌─────────────────────────────────────────────────────────────────────┐"
     echo "     │                                                                     │"
@@ -21,8 +50,9 @@ logo() {
     echo "     └─────────────────────────────────────────────────────────────────────┘"
     echo ""
 }
+
 # ----------------------------------------------------------------------
-# 1. Función de autoinstalación para Debian, Fedora y Arch
+# 1. Autoinstalación de Dependencias
 # ----------------------------------------------------------------------
 check_and_install() {
     local missing_pkgs=()
@@ -32,14 +62,14 @@ check_and_install() {
 
     if [ ${#missing_pkgs[@]} -ne 0 ]; then
         echo "--> Faltan las siguientes dependencias: ${missing_pkgs[*]}"
-		read -rp "¿Deseas instalarlas automáticamente? (s/N): " install_confirm
-		if [[ "$install_confirm" =~ ^[Ss]$ ]]; then
-        echo "--> Intentando instalar..."
-		else
-			echo "Instalación cancelada. Por favor, instala manualmente: ${missing_pkgs[*]}"
-			sleep 2
-			exit 1
-		fi
+        read -rp "¿Deseas instalarlas automáticamente? (s/N): " install_confirm
+        if [[ "$install_confirm" =~ ^[Ss]$ ]]; then
+            echo "--> Intentando instalar..."
+        else
+            echo "Instalación cancelada. Por favor, instala manualmente: ${missing_pkgs[*]}"
+            sleep 2
+            exit 1
+        fi
 
         if [ -f /etc/os-release ]; then
             . /etc/os-release
@@ -66,27 +96,36 @@ check_and_install() {
     fi
 }
 
-# Ejecutar verificación de dependencias
+# Verificación inicial
 check_and_install
 
 # ----------------------------------------------------------------------
-# 2. Menú Principal interactivo
+# 2. Menú Principal
 # ----------------------------------------------------------------------
 main_menu() {
     while true; do
         clear
-		logo
-		local help_msg="💡 ATAJOS Y NAVEGACIÓN:\n\n -EN MICRO:\n    Ctrl+S: Guardar\n    Ctrl+Q: Salir\n    Ctrl+F: Buscar\n    Ctrl+Z: Deshacer\n\n -EN EL MENÚ:\n    Esc/Ctrl+C: Volver o Salir"
+        logo
+        local help_msg="💡 ATAJOS Y NAVEGACIÓN:\n\n -EN MICRO:\n    Ctrl+S: Guardar\n    Ctrl+Q: Salir\n    Ctrl+F: Buscar\n    Ctrl+Z: Deshacer\n\n -EN EL MENÚ:\n    Esc/Ctrl+C: Salir del programa"
         local choice
+        
+        # Ejecutar fzf
         choice=$(printf "📝 Crear\n📂 Editar\n🗑️ Eliminar\n🚪 Salir" | fzf \
             --header="NOTE4ME en: $NOTES_DIR" \
             --prompt="Selecciona una opción: " \
             --height=40% \
             --layout=reverse \
             --border \
-			--preview-window="right:45%:border-rounded:wrap" \
+            --preview-window="right:45%:border-rounded:wrap" \
             --preview="echo -e \"$help_msg\"")
-			
+
+        local fzf_exit=$?
+
+        # Si el usuario presiona Esc o Ctrl+C en el menú principal (fzf devuelve 130 o >0 sin selección)
+        if [ $fzf_exit -eq 130 ] || [ $fzf_exit -gt 0 ] && [ -z "$choice" ]; then
+            cleanup 0
+        fi
+
         case "$choice" in
             "📝 Crear")
                 create_note
@@ -97,18 +136,16 @@ main_menu() {
             "🗑️ Eliminar")
                 delete_note
                 ;;
-            "🚪 Salir"|"")
-                echo "¡Bye Bye 📝4me!"
-                exit 0
+            "🚪 Salir")
+                cleanup 0
                 ;;
         esac
     done
 }
 
 # ----------------------------------------------------------------------
-# 3. Funciones de gestión de notas
+# 3. Funciones de Gestión
 # ----------------------------------------------------------------------
-
 create_note() {
     echo ""
     read -rp "Nombre de la nueva nota sin espacios (ej. idea.txt): " filename
@@ -118,7 +155,6 @@ create_note() {
         return
     fi
 
-    # Asegurar extensión .txt si no se ingresa una
     [[ "$filename" != *.* ]] && filename="${filename}.txt"
 
     micro "$NOTES_DIR/$filename"
@@ -126,15 +162,15 @@ create_note() {
 
 edit_note() {
     local selected
-    # fzf con Vista Previa (Preview) usando micro o cat
     selected=$(ls -1 "$NOTES_DIR" 2>/dev/null | fzf \
-        --header="--- Selecciona una nota para EDITAR ---" \
+        --header="--- Selecciona una nota para EDITAR (Esc/Ctrl+C para volver) ---" \
         --prompt="Nota > " \
         --height=60% \
         --layout=reverse \
         --border \
         --preview="cat '$NOTES_DIR/{}'")
 
+    # Si se seleccionó una nota válida, la abrimos en micro
     if [ -n "$selected" ]; then
         micro "$NOTES_DIR/$selected"
     fi
@@ -143,7 +179,7 @@ edit_note() {
 delete_note() {
     local selected
     selected=$(ls -1 "$NOTES_DIR" 2>/dev/null | fzf \
-        --header="--- Selecciona una nota para ELIMINAR ---" \
+        --header="--- Selecciona una nota para ELIMINAR (Esc/Ctrl+C para volver) ---" \
         --prompt="Eliminar > " \
         --height=60% \
         --layout=reverse \
@@ -153,12 +189,12 @@ delete_note() {
     if [ -n "$selected" ]; then
         read -rp "¿Estás seguro de eliminar '$selected'? (s/N): " confirm
         if [[ "$confirm" =~ ^[Ss]$ ]]; then
-            rm "$NOTES_DIR/$selected"
+            rm -f "$NOTES_DIR/$selected"
             echo "Nota eliminada."
             sleep 1
         fi
     fi
 }
 
-# Lanzar programa
+# Lanzar aplicación
 main_menu
