@@ -5,7 +5,7 @@
 # ----------------------------------------------------------------------
 NOTES_DIR="$HOME/note4me"
 mkdir -p "$NOTES_DIR"
-version="v 1.1"
+version="v 1.3"
 
 # Flag para prevenir ejecuciones múltiples del trap durante el exit
 IS_EXITING=0
@@ -59,6 +59,7 @@ check_and_install() {
 
     command -v fzf >/dev/null 2>&1 || missing_pkgs+=("fzf")
     command -v micro >/dev/null 2>&1 || missing_pkgs+=("micro")
+    command -v rg >/dev/null 2>&1 || missing_pkgs+=("ripgrep")
 
     if [ ${#missing_pkgs[@]} -ne 0 ]; then
         echo "--> Faltan las siguientes dependencias: ${missing_pkgs[*]}"
@@ -106,11 +107,11 @@ main_menu() {
     while true; do
         clear
         logo
-        local help_msg="💡 ATAJOS Y NAVEGACIÓN:\n\n -EN MICRO:\n    Ctrl+S: Guardar\n    Ctrl+Q: Salir\n    Ctrl+F: Buscar\n    Ctrl+Z: Deshacer\n\n -EN EL MENÚ:\n    Esc/Ctrl+C: Salir del programa"
+        local help_msg="💡 ATAJOS Y NAVEGACIÓN:\n\n -EN MICRO:\n    Ctrl+S: Guardar\n    Ctrl+Q: Salir\n    Ctrl+F: Buscar\n    Ctrl+Z: Deshacer\n\n -EN EL MENÚ:\n    Esc/Ctrl+C: Volver/Salir"
         local choice
         
         # Ejecutar fzf
-        choice=$(printf "📝 Crear\n📂 Editar\n🗑️ Eliminar\n🚪 Salir" | fzf \
+        choice=$(printf "📝 Crear\n📂 Editar\n🔍 Buscar\n🗑️ Eliminar\n🚪 Salir" | fzf \
             --header="NOTE4ME en: $NOTES_DIR" \
             --prompt="Selecciona una opción: " \
             --height=40% \
@@ -127,18 +128,11 @@ main_menu() {
         fi
 
         case "$choice" in
-            "📝 Crear")
-                create_note
-                ;;
-            "📂 Editar")
-                edit_note
-                ;;
-            "🗑️ Eliminar")
-                delete_note
-                ;;
-            "🚪 Salir")
-                cleanup 0
-                ;;
+            "📝 Crear")          create_note ;;
+            "📂 Editar")         edit_note ;;
+            "🔍 Buscar")         search_content ;;
+            "🗑️ Eliminar")       delete_note ;;
+            "🚪 Salir")          cleanup 0 ;;
         esac
     done
 }
@@ -146,6 +140,27 @@ main_menu() {
 # ----------------------------------------------------------------------
 # 3. Funciones de Gestión
 # ----------------------------------------------------------------------
+search_content() {
+    local selected
+    # (cd ...) ejecuta dentro del directorio sin cambiar el directorio actual del script principal
+    selected=$( (cd "$NOTES_DIR" && rg --line-number --no-heading --color=always "" 2>/dev/null) | fzf \
+        --ansi \
+        --header="-BUSCAR EN: $NOTES_DIR" \
+        --prompt="-Escribe para filtrar > " \
+        --height=80% \
+        --layout=reverse \
+        --border \
+        --delimiter=: \
+        --preview-window="right:30%:border-rounded:wrap" \
+        --preview="bat --style=numbers --color=always --highlight-line {2} '$NOTES_DIR/{1}' 2>/dev/null || head -n 30 '$NOTES_DIR/{1}'")
+
+    if [ -n "$selected" ]; then
+        local file line
+        file=$(echo "$selected" | cut -d: -f1)
+        line=$(echo "$selected" | cut -d: -f2)
+        micro "+$line" "$NOTES_DIR/$file"
+    fi
+}
 create_note() {
     echo ""
     read -rp "Nombre de la nueva nota sin espacios (ej. idea.txt): " filename
