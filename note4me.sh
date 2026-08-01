@@ -82,8 +82,9 @@ check_and_install() {
                 fedora|rhel|centos)
                     sudo dnf install -y "${missing_pkgs[@]}"
                     ;;
-                arch|manjaro|endeavouros)
-                    sudo pacman -Sy --noconfirm "${missing_pkgs[@]}"
+                arch|manjaro|endeavouros|garuda)
+                    # Usamos -S en lugar de -Sy para evitar problemas de sincronización parcial en Arch
+                    sudo pacman -S --noconfirm "${missing_pkgs[@]}"
                     ;;
                 *)
                     echo "Error: Distribución no soportada automáticamente ($ID)."
@@ -91,6 +92,9 @@ check_and_install() {
                     exit 1
                     ;;
             esac
+            
+            # Refrescar la tabla de comandos de Bash tras instalar los binarios
+            hash -r 2>/dev/null || true
         else
             echo "Error: No se pudo determinar el sistema operativo."
             exit 1
@@ -101,9 +105,14 @@ check_and_install() {
 # Verificación inicial
 check_and_install
 
-# Detectar el nombre correcto del ejecutable de bat
-BAT_CMD="bat"
-command -v batcat >/dev/null 2>&1 && BAT_CMD="batcat"
+# Detectar ejecutable de bat o usar cat simple como fallback si falla
+if command -v bat >/dev/null 2>&1; then
+    BAT_CMD="bat"
+elif command -v batcat >/dev/null 2>&1; then
+    BAT_CMD="batcat"
+else
+    BAT_CMD="cat"
+fi
 
 # ----------------------------------------------------------------------
 # 2. Menú Principal
