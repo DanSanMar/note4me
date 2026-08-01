@@ -5,7 +5,7 @@
 # ----------------------------------------------------------------------
 NOTES_DIR="$HOME/note4me"
 mkdir -p "$NOTES_DIR"
-version="v 1.4"
+version="v 1.5"
 
 # Flag para prevenir ejecuciones múltiples del trap durante el exit
 IS_EXITING=0
@@ -24,7 +24,7 @@ cleanup() {
     tput cnorm 2>/dev/null || true
     stty echo 2>/dev/null || true
 
-    echo -e "\n\n\033[1;33m[!] Cerrando note4me de forma segura... ¡Bye Bye! 📝4me\033[0m"
+    echo -e "\n\n\033[1;33m[!] Cerrando de forma segura... ¡Bye Bye! 📝4me\033[0m"
     exit "$exit_code"
 }
 
@@ -162,10 +162,10 @@ search_content() {
     fi
 }
 create_note() {
-    echo ""
+    clear
     local action
-    action=$(printf "📄 Archivo rápido (Raíz)\n📂 Crear en Carpeta (Existente o Nueva)" | fzf \
-        --header="--- CREAR NOTA ---" \
+    action=$(printf "📄 Nota directa\n📂 Nota en Carpeta (Nueva o Existente)" | fzf \
+        --header="--- 📝 CREAR NOTA ---" \
         --prompt="Selecciona opción > " \
         --height=30% \
         --layout=reverse \
@@ -175,12 +175,11 @@ create_note() {
 
     local target_dir="$NOTES_DIR"
 
-    if [ "$action" = "📂 Crear en Carpeta (Existente o Nueva)" ]; then
-        # Obtener lista de subcarpetas existentes
+    # Corregida la coincidencia exacta del string del menú
+    if [ "$action" = "📂 Nota en Carpeta (Nueva o Existente)" ]; then
         local folders
         folders=$(find "$NOTES_DIR" -mindepth 1 -type d 2>/dev/null | sed "s|^$NOTES_DIR/||")
 
-        # Presentar las carpetas + la opción de crear una nueva al inicio
         local selected_folder
         selected_folder=$(printf "[ 📁 + Nueva Carpeta ]\n%s" "$folders" | fzf \
             --header="--- Selecciona o Crea una Carpeta ---" \
@@ -192,33 +191,56 @@ create_note() {
         [[ -z "$selected_folder" ]] && return
 
         if [ "$selected_folder" = "[ 📁 + Nueva Carpeta ]" ]; then
-            read -rp "Nombre de la nueva carpeta: " new_folder_name
+            # Entrada estilizada con fzf para la nueva carpeta
+            local new_folder_name
+            new_folder_name=$(echo "" | fzf \
+                --print-query \
+                --header="--- 📁 CREAR NUEVA CARPETA ---" \
+                --prompt="Escribe el nombre de la carpeta > " \
+                --height=20% \
+                --layout=reverse \
+                --border | head -n1)
+
             if [ -z "$new_folder_name" ]; then
-                echo "Nombre de carpeta inválido."
+                echo -e "\033[1;31m[!] Nombre de carpeta cancelado o inválido.\033[0m"
                 sleep 1
                 return
             fi
+
             target_dir="$NOTES_DIR/$new_folder_name"
             mkdir -p "$target_dir"
-            echo "Carpeta '$new_folder_name' lista."
         else
             target_dir="$NOTES_DIR/$selected_folder"
         fi
     fi
 
-    # Flujo continuo: Creación del archivo en target_dir
-    echo ""
-    read -rp "Nombre del archivo (ej. nota.txt): " filename
+    # ------------------------------------------------------------------
+    # ENTRADA MEJORADA Y ESTILIZADA PARA EL NOMBRE DEL ARCHIVO
+    # ------------------------------------------------------------------
+    # Muestra en el header el directorio donde se creará el archivo
+    local display_dir
+    display_dir=$(echo "$target_dir" | sed "s|^$HOME|~|")
+
+    local filename
+    filename=$(echo "" | fzf \
+        --print-query \
+        --header="--- 📝 NOMBRE DE LA NOTA (Ubicación: $display_dir) ---" \
+        --prompt="Escribe el nombre (ej. idea.txt) > " \
+        --height=20% \
+        --layout=reverse \
+        --border | head -n1)
+
+    # Validar si el usuario presionó Esc o no escribió nada
     if [ -z "$filename" ]; then
-        echo "Nombre de archivo inválido."
+        echo -e "\033[1;33m[!] Creación de nota cancelada.\033[0m"
         sleep 1
         return
     fi
 
-    # Asegurar extensión .txt si no tiene extensión
+    # Auto-completar extensión .txt si no ingresó ninguna
     [[ "$filename" != *.* ]] && filename="${filename}.txt"
 
-    # Abrir directamente en el editor
+    # Abrir en el editor de texto
     micro "$target_dir/$filename"
 }
 
@@ -226,7 +248,7 @@ edit_note() {
     local selected
     selected=$(find "$NOTES_DIR" -type f 2>/dev/null | sed "s|^$NOTES_DIR/||" | fzf \
         --header="--- Selecciona una nota para EDITAR ---" \
-        --prompt="Nota > " \
+        --prompt="Empieza a escribir para filtrar > " \
         --height=60% \
         --layout=reverse \
         --border \
@@ -241,7 +263,7 @@ delete_note() {
     local selected
     selected=$(find "$NOTES_DIR" -type f 2>/dev/null | sed "s|^$NOTES_DIR/||" | fzf \
         --header="--- Selecciona una nota para ELIMINAR ---" \
-        --prompt="Eliminar > " \
+        --prompt="Empieza a escribir para filtrar > " \
         --height=60% \
         --layout=reverse \
         --border \
