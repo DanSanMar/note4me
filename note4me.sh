@@ -250,8 +250,28 @@ delete_note() {
     if [ -n "$selected" ]; then
         read -rp "¿Estás seguro de eliminar '$selected'? (s/N): " confirm
         if [[ "$confirm" =~ ^[Ss]$ ]]; then
-            rm -f "$NOTES_DIR/$selected"
+            local full_path="$NOTES_DIR/$selected"
+            local parent_dir
+            parent_dir=$(dirname "$full_path")
+
+            # Eliminar el archivo
+            rm -f "$full_path"
             echo "Nota eliminada."
+
+            # Verificar si el archivo estaba dentro de una subcarpeta (diferente a $NOTES_DIR)
+            if [ "$parent_dir" != "$NOTES_DIR" ]; then
+                # Comprobar si la carpeta quedó completamente vacía
+                if [ -z "$(ls -A "$parent_dir" 2>/dev/null)" ]; then
+                    local folder_name
+                    folder_name=$(basename "$parent_dir")
+                    echo ""
+                    read -rp "La carpeta '$folder_name' ha quedado vacía. ¿Deseas eliminarla también? (s/N): " del_folder_confirm
+                    if [[ "$del_folder_confirm" =~ ^[Ss]$ ]]; then
+                        rmdir "$parent_dir" 2>/dev/null && echo "Carpeta '$folder_name' eliminada." || echo "No se pudo eliminar la carpeta."
+                    fi
+                fi
+            fi
+
             sleep 1
         fi
     fi
