@@ -5,7 +5,7 @@
 # ----------------------------------------------------------------------
 NOTES_DIR="$HOME/note4me"
 mkdir -p "$NOTES_DIR"
-version="v 1.5"
+version="v 1.6"
 
 # Flag para prevenir ejecuciones múltiples del trap durante el exit
 IS_EXITING=0
@@ -60,7 +60,8 @@ check_and_install() {
     command -v fzf >/dev/null 2>&1 || missing_pkgs+=("fzf")
     command -v micro >/dev/null 2>&1 || missing_pkgs+=("micro")
     command -v rg >/dev/null 2>&1 || missing_pkgs+=("ripgrep")
-
+    command -v bat >/dev/null 2>&1 || command -v batcat >/dev/null 2>&1 || missing_pkgs+=("bat")
+    
     if [ ${#missing_pkgs[@]} -ne 0 ]; then
         echo "--> Faltan las siguientes dependencias: ${missing_pkgs[*]}"
         read -rp "¿Deseas instalarlas automáticamente? (s/N): " install_confirm
@@ -99,6 +100,10 @@ check_and_install() {
 
 # Verificación inicial
 check_and_install
+
+# Detectar el nombre correcto del ejecutable de bat
+BAT_CMD="bat"
+command -v batcat >/dev/null 2>&1 && BAT_CMD="batcat"
 
 # ----------------------------------------------------------------------
 # 2. Menú Principal
@@ -142,7 +147,11 @@ main_menu() {
 # ----------------------------------------------------------------------
 search_content() {
     local selected
-    # (cd ...) ejecuta dentro del directorio sin cambiar el directorio actual del script principal
+    # Detectar el comando de bat según el sistema (bat o batcat)
+    local bat_cmd="bat"
+    command -v batcat >/dev/null 2>&1 && bat_cmd="batcat"
+
+    # --theme=ansi en bat/batcat evita que se pinte un fondo negro en la previsualización
     selected=$( (cd "$NOTES_DIR" && rg --line-number --no-heading --color=always "" 2>/dev/null) | fzf \
         --ansi \
         --header="-BUSCAR EN: $NOTES_DIR" \
@@ -152,7 +161,7 @@ search_content() {
         --border \
         --delimiter=: \
         --preview-window="right:30%:border-rounded:wrap" \
-        --preview="bat --style=numbers --color=always --highlight-line {2} '$NOTES_DIR/{1}' 2>/dev/null || head -n 30 '$NOTES_DIR/{1}'")
+        --preview="$bat_cmd --theme=ansi --style=plain --color=always --highlight-line {2} '$NOTES_DIR/{1}' 2>/dev/null || head -n 30 '$NOTES_DIR/{1}'")
 
     if [ -n "$selected" ]; then
         local file line
@@ -247,13 +256,12 @@ create_note() {
 edit_note() {
     local selected
     selected=$(find "$NOTES_DIR" -type f 2>/dev/null | sed "s|^$NOTES_DIR/||" | fzf \
-        --header="--- Selecciona una nota para EDITAR ---" \
-        --prompt="Empieza a escribir para filtrar > " \
+        --header="--- Selecciona para EDITAR ---" \
+        --prompt="Escribe para filtrar > " \
         --height=60% \
         --layout=reverse \
         --border \
-        --preview="cat '$NOTES_DIR/{}'")
-
+        --preview="$BAT_CMD --theme=ansi --style=plain --color=always '$NOTES_DIR/{}'")
     if [ -n "$selected" ]; then
         micro "$NOTES_DIR/$selected"
     fi
@@ -262,12 +270,12 @@ edit_note() {
 delete_note() {
     local selected
     selected=$(find "$NOTES_DIR" -type f 2>/dev/null | sed "s|^$NOTES_DIR/||" | fzf \
-        --header="--- Selecciona una nota para ELIMINAR ---" \
-        --prompt="Empieza a escribir para filtrar > " \
+        --header="--- Selecciona para ELIMINAR ---" \
+        --prompt="Escribe para filtrar > " \
         --height=60% \
         --layout=reverse \
         --border \
-        --preview="cat '$NOTES_DIR/{}'")
+        --preview="$BAT_CMD --theme=ansi --style=plain --color=always '$NOTES_DIR/{}'")
 
     if [ -n "$selected" ]; then
         read -rp "¿Estás seguro de eliminar '$selected'? (s/N): " confirm
